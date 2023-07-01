@@ -209,6 +209,9 @@ type HashSuffixesRequest struct {
 
 // HashSuffixes returns, for a given password hash prefix, all seen suffixes and
 // their frequencies.
+//
+// If server response padding is enabled, the returned map will omit suffixes
+// that have a frequency of zero.
 func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map[string]int, error) {
 	return nil, nil
 }
