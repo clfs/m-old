@@ -2,15 +2,20 @@
 package hibp
 
 import (
+	"bufio"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // defaultHIBPBaseURL is the default base URL for the HIBP API.
 const defaultHIBPBaseURL = "https://haveibeenpwned.com/api/v3/"
 
 // defaultPPBaseURL is the default base URL for the Pwned Passwords API.
-const defaultPPBaseURL = "https://api.pwnedpasswords.com/range/"
+const defaultPPBaseURL = "https://api.pwnedpasswords.com"
 
 // Breach represents a data breach.
 type Breach struct {
@@ -146,6 +151,14 @@ func (c *Client) SetHTTPClient(h *http.Client) {
 	c.h = h
 }
 
+// RateLimitError is returned when the client has been rate limited. The error
+// value is the number of seconds until the rate limit expires.
+type RateLimitError int
+
+func (e RateLimitError) Error() string {
+	return fmt.Sprintf("rate limited for %d seconds", e)
+}
+
 // AccountBreachesRequest describes a [Client.AccountBreaches] request.
 type AccountBreachesRequest struct {
 	Account           string // Required. The account to retrieve breaches for.
@@ -213,7 +226,65 @@ type HashSuffixesRequest struct {
 // If server response padding is enabled, the returned map will omit suffixes
 // that have a frequency of zero.
 func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map[string]int, error) {
-	return nil, nil
+	rawURL := fmt.Sprintf("%s/range/%s", c.ppBaseURL, req.Prefix)
+
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("User-Agent", c.userAgent)
+
+	if req.AddPadding {
+		httpReq.Header.Set("Add-Padding", "true")
+	}
+
+	resp, err := c.h.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return parseSuffixFrequencies(resp.Body)
+	case http.StatusTooManyRequests:
+		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
+		if err != nil {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		return nil, RateLimitError(d)
+	default:
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+}
+
+func parseSuffixFrequencies(r io.Reader) (map[string]int, error) {
+	m := make(map[string]int)
+	s := bufio.NewScanner(r)
+	for s.Scan() {
+		line := s.Text()
+		h, freq, ok := strings.Cut(line, ":")
+		if !ok {
+			return nil, fmt.Errorf("invalid line: %q", line)
+		}
+		n, err := strconv.Atoi(freq)
+		if err != nil {
+			return nil, fmt.Errorf("invalid line: %q", line)
+		}
+		switch {
+		case n < 0:
+			return nil, fmt.Errorf("invalid line: %q", line)
+		case n == 0:
+			continue // skip padding lines
+		default:
+			m[h] = n
+		}
+	}
+	if err := s.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // IsPwnedPassword returns true if the given password has been pwned. This is a
