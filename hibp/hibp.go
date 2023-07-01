@@ -199,7 +199,41 @@ func (c *Client) Breach(ctx context.Context, req BreachRequest) (*Breach, error)
 
 // Breaches returns all breaches in the system.
 func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
-	return nil, nil
+	rawURL := fmt.Sprintf("%s/breaches", c.hibpBaseURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", c.userAgent)
+
+	resp, err := c.h.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return parseBreaches(resp.Body)
+	case http.StatusTooManyRequests:
+		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
+		if err != nil {
+			return nil, err
+		}
+		return nil, RateLimitError(d)
+	default:
+		return nil, err
+	}
+}
+
+func parseBreaches(r io.Reader) ([]Breach, error) {
+	var bs []Breach
+	if err := json.NewDecoder(r).Decode(&bs); err != nil {
+		return nil, err
+	}
+	return bs, nil
 }
 
 // DataClasses returns all data classes in the system. A "data class" is an
@@ -236,11 +270,11 @@ func (c *Client) DataClasses(ctx context.Context) ([]string, error) {
 }
 
 func parseDataClasses(r io.Reader) ([]string, error) {
-	var s []string
-	if err := json.NewDecoder(r).Decode(&s); err != nil {
+	var dc []string
+	if err := json.NewDecoder(r).Decode(&dc); err != nil {
 		return nil, err
 	}
-	return s, nil
+	return dc, nil
 }
 
 // HashType represents the type of a Pwned Passwords hash.
