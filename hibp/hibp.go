@@ -268,7 +268,7 @@ func parseSuffixFrequencies(r io.Reader) (map[string]int, error) {
 	s := bufio.NewScanner(r)
 	for s.Scan() {
 		line := s.Text()
-		h, freq, ok := strings.Cut(line, ":")
+		suffix, freq, ok := strings.Cut(line, ":")
 		if !ok {
 			return nil, fmt.Errorf("invalid line: %q", line)
 		}
@@ -282,7 +282,7 @@ func parseSuffixFrequencies(r io.Reader) (map[string]int, error) {
 		case n == 0:
 			continue // skip padding lines
 		default:
-			m[h] = n
+			m[suffix] = n
 		}
 	}
 	if err := s.Err(); err != nil {
