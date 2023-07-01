@@ -4,11 +4,15 @@ package hibp
 import (
 	"bufio"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/clfs/m/ntlm"
 )
 
 // defaultHIBPBaseURL is the default base URL for the HIBP API.
@@ -289,6 +293,45 @@ func parseSuffixFrequencies(r io.Reader) (map[string]int, error) {
 
 // IsPwnedPassword returns true if the given password has been pwned. This is a
 // helper function that checks both the SHA-1 and NTLM hash of the password.
+//
+// Callers that need additional control over rate limiting should use
+// [Client.HashSuffixes] directly.
 func (c *Client) IsPwnedPassword(ctx context.Context, password string) (bool, error) {
+	sha1Hash := sha1.Sum([]byte(password))
+	sha1Hex := hex.EncodeToString(sha1Hash[:])
+	sha1Prefix, sha1Suffix := sha1Hex[:5], sha1Hex[5:]
+
+	sha1Suffixes, err := c.HashSuffixes(ctx, HashSuffixesRequest{
+		Prefix:     sha1Prefix,
+		HashType:   HashTypeSHA1,
+		AddPadding: true,
+	})
+	if err != nil {
+		return false, err
+	}
+	for suffix := range sha1Suffixes {
+		if suffix == sha1Suffix {
+			return true, nil
+		}
+	}
+
+	ntlmHash := ntlm.Sum([]byte(password))
+	ntlmHex := hex.EncodeToString(ntlmHash[:])
+	ntlmPrefix, ntlmSuffix := ntlmHex[:5], ntlmHex[5:]
+
+	ntlmSuffixes, err := c.HashSuffixes(ctx, HashSuffixesRequest{
+		Prefix:     ntlmPrefix,
+		HashType:   HashTypeNTLM,
+		AddPadding: true,
+	})
+	if err != nil {
+		return false, err
+	}
+	for suffix := range ntlmSuffixes {
+		if suffix == ntlmSuffix {
+			return true, nil
+		}
+	}
+
 	return false, nil
 }
