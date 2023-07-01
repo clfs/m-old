@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -205,7 +206,41 @@ func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
 // attribute of a record compromised in a breach. For example, many breaches
 // expose data classes such as "Email addresses" and "Passwords".
 func (c *Client) DataClasses(ctx context.Context) ([]string, error) {
-	return nil, nil
+	rawURL := fmt.Sprintf("%s/dataclasses", c.hibpBaseURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", c.userAgent)
+
+	resp, err := c.h.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return parseDataClasses(resp.Body)
+	case http.StatusTooManyRequests:
+		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
+		if err != nil {
+			return nil, err
+		}
+		return nil, RateLimitError(d)
+	default:
+		return nil, err
+	}
+}
+
+func parseDataClasses(r io.Reader) ([]string, error) {
+	var s []string
+	if err := json.NewDecoder(r).Decode(&s); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // HashType represents the type of a Pwned Passwords hash.
@@ -255,11 +290,11 @@ func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map
 	case http.StatusTooManyRequests:
 		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
 		if err != nil {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+			return nil, err
 		}
 		return nil, RateLimitError(d)
 	default:
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, err
 	}
 }
 
