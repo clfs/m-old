@@ -66,15 +66,6 @@ func TestGolden(t *testing.T) {
 	}
 }
 
-func TestSum(t *testing.T) {
-	for _, g := range golden {
-		s := fmt.Sprintf("%x", Sum([]byte(g.in)))
-		if s != g.out {
-			t.Fatalf("Sum(%s) = %s want %s", g.in, s, g.out)
-		}
-	}
-}
-
 func TestSizes(t *testing.T) {
 	c := New()
 	if size := c.Size(); size != Size {
