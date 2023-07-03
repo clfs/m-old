@@ -228,12 +228,11 @@ func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
 	}
 	defer resp.Body.Close()
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return parseBreaches(resp.Body)
-	default:
+	if resp.StatusCode != http.StatusOK {
 		return nil, newError(resp)
 	}
+
+	return parseBreaches(resp.Body)
 }
 
 func parseBreaches(r io.Reader) ([]Breach, error) {
@@ -263,12 +262,11 @@ func (c *Client) DataClasses(ctx context.Context) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return parseDataClasses(resp.Body)
-	default:
+	if resp.StatusCode != http.StatusOK {
 		return nil, newError(resp)
 	}
+
+	return parseDataClasses(resp.Body)
 }
 
 func parseDataClasses(r io.Reader) ([]string, error) {
@@ -320,12 +318,11 @@ func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map
 	}
 	defer resp.Body.Close()
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return parseSuffixFrequencies(resp.Body)
-	default:
+	if resp.StatusCode != http.StatusOK {
 		return nil, newError(resp)
 	}
+
+	return parseSuffixFrequencies(resp.Body)
 }
 
 func parseSuffixFrequencies(r io.Reader) (map[string]int, error) {
