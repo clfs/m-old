@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/clfs/m/ntlm"
 )
@@ -156,12 +157,25 @@ func (c *Client) SetHTTPClient(h *http.Client) {
 	c.h = h
 }
 
-// RateLimitError is returned when the client has been rate limited. The error
-// value is the number of seconds until the rate limit expires.
-type RateLimitError int
+// Error represents a failed request to the HIBP API.
+type Error struct {
+	StatusCode int
+	RetryAfter *time.Duration
+}
 
-func (e RateLimitError) Error() string {
-	return fmt.Sprintf("rate limited for %d seconds", e)
+func (e *Error) Error() string {
+	return fmt.Sprintf("unexpected status code: %d", e.StatusCode)
+}
+
+func newError(resp *http.Response) *Error {
+	e := &Error{
+		StatusCode: resp.StatusCode,
+	}
+	if n, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil {
+		d := time.Duration(n) * time.Second
+		e.RetryAfter = &d
+	}
+	return e
 }
 
 // AccountBreachesRequest describes a [Client.AccountBreaches] request.
@@ -217,14 +231,8 @@ func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return parseBreaches(resp.Body)
-	case http.StatusTooManyRequests:
-		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
-		if err != nil {
-			return nil, err
-		}
-		return nil, RateLimitError(d)
 	default:
-		return nil, err
+		return nil, newError(resp)
 	}
 }
 
@@ -258,14 +266,8 @@ func (c *Client) DataClasses(ctx context.Context) ([]string, error) {
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return parseDataClasses(resp.Body)
-	case http.StatusTooManyRequests:
-		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
-		if err != nil {
-			return nil, err
-		}
-		return nil, RateLimitError(d)
 	default:
-		return nil, err
+		return nil, newError(resp)
 	}
 }
 
@@ -321,14 +323,8 @@ func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return parseSuffixFrequencies(resp.Body)
-	case http.StatusTooManyRequests:
-		d, err := strconv.Atoi(resp.Header.Get("retry-after"))
-		if err != nil {
-			return nil, err
-		}
-		return nil, RateLimitError(d)
 	default:
-		return nil, err
+		return nil, newError(resp)
 	}
 }
 
