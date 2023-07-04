@@ -157,19 +157,22 @@ func (c *Client) SetHTTPClient(h *http.Client) {
 	c.h = h
 }
 
-// Error contains information about a failed request to the HIBP API.
-type Error struct {
+// RequestError describes a failed HTTP request.
+type RequestError struct {
+	// The HTTP response status code.
 	StatusCode int
+	// Required delay before retrying the request. If zero, the request can be
+	// retried immediately.
 	RetryAfter time.Duration
 }
 
-func (e *Error) Error() string {
-	return fmt.Sprintf("unexpected status code: %d", e.StatusCode)
+func (e *RequestError) Error() string {
+	return fmt.Sprintf("failed request with status code %d", e.StatusCode)
 }
 
-func newError(resp *http.Response) *Error {
+func newRequestError(resp *http.Response) *RequestError {
 	n, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
-	return &Error{
+	return &RequestError{
 		StatusCode: resp.StatusCode,
 		RetryAfter: time.Duration(n) * time.Second,
 	}
@@ -226,7 +229,7 @@ func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, newError(resp)
+		return nil, newRequestError(resp)
 	}
 
 	return parseBreaches(resp.Body)
@@ -260,7 +263,7 @@ func (c *Client) DataClasses(ctx context.Context) ([]string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, newError(resp)
+		return nil, newRequestError(resp)
 	}
 
 	return parseDataClasses(resp.Body)
@@ -316,7 +319,7 @@ func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, newError(resp)
+		return nil, newRequestError(resp)
 	}
 
 	return parseSuffixFrequencies(resp.Body)
