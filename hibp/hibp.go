@@ -188,6 +188,8 @@ type AccountBreachesRequest struct {
 }
 
 // AccountBreaches returns all breaches for an account.
+//
+// TODO: Have TruncateResponse always be true.
 func (c *Client) AccountBreaches(ctx context.Context, req AccountBreachesRequest) ([]Breach, error) {
 	return nil, nil
 }
