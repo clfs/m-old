@@ -304,16 +304,15 @@ const (
 
 // HashSuffixesRequest describes a [Client.HashSuffixes] request.
 type HashSuffixesRequest struct {
-	Prefix     string   // The prefix of the hash to search for.
-	HashType   HashType // The type of hash to search for.
-	AddPadding bool     // If true, pad server responses to enhance privacy.
+	Prefix   string   // The prefix of the hash to search for.
+	HashType HashType // The type of hash to search for.
 }
 
 // HashSuffixes returns, for a given password hash prefix, all seen suffixes and
 // their frequencies.
 //
-// If server response padding is enabled, the returned map will omit suffixes
-// that have a frequency of zero.
+// Server response padding is always enabled. The returned map will omit
+// suffixes that have a frequency of zero.
 func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map[string]int, error) {
 	rawURL := fmt.Sprintf("%s/range/%s", c.ppBaseURL, req.Prefix)
 
@@ -323,10 +322,7 @@ func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map
 	}
 
 	httpReq.Header.Set("User-Agent", c.userAgent)
-
-	if req.AddPadding {
-		httpReq.Header.Set("Add-Padding", "true")
-	}
+	httpReq.Header.Set("Add-Padding", "true")
 
 	resp, err := c.h.Do(httpReq)
 	if err != nil {
