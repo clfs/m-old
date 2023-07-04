@@ -376,9 +376,8 @@ func (c *Client) IsPwnedPassword(ctx context.Context, password string) (bool, er
 	sha1Prefix, sha1Suffix := sha1Hex[:5], sha1Hex[5:]
 
 	sha1Suffixes, err := c.HashSuffixes(ctx, HashSuffixesRequest{
-		Prefix:     sha1Prefix,
-		HashType:   HashTypeSHA1,
-		AddPadding: true,
+		Prefix:   sha1Prefix,
+		HashType: HashTypeSHA1,
 	})
 	if err != nil {
 		return false, err
@@ -394,9 +393,8 @@ func (c *Client) IsPwnedPassword(ctx context.Context, password string) (bool, er
 	ntlmPrefix, ntlmSuffix := ntlmHex[:5], ntlmHex[5:]
 
 	ntlmSuffixes, err := c.HashSuffixes(ctx, HashSuffixesRequest{
-		Prefix:     ntlmPrefix,
-		HashType:   HashTypeNTLM,
-		AddPadding: true,
+		Prefix:   ntlmPrefix,
+		HashType: HashTypeNTLM,
 	})
 	if err != nil {
 		return false, err
