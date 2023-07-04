@@ -160,7 +160,7 @@ func (c *Client) SetHTTPClient(h *http.Client) {
 // Error represents a failed request to the HIBP API.
 type Error struct {
 	StatusCode int
-	RetryAfter *time.Duration
+	RetryAfter time.Duration
 }
 
 func (e *Error) Error() string {
@@ -168,14 +168,11 @@ func (e *Error) Error() string {
 }
 
 func newError(resp *http.Response) *Error {
-	e := &Error{
+	n, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+	return &Error{
 		StatusCode: resp.StatusCode,
+		RetryAfter: time.Duration(n) * time.Second,
 	}
-	if n, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil {
-		d := time.Duration(n) * time.Second
-		e.RetryAfter = &d
-	}
-	return e
 }
 
 // AccountBreachesRequest describes a [Client.AccountBreaches] request.
