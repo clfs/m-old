@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -211,18 +212,34 @@ func (c *Client) Breach(ctx context.Context, req BreachRequest) (*Breach, error)
 	return nil, nil
 }
 
-// Breaches returns all breaches in the system.
-func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
-	rawURL := fmt.Sprintf("%s/breaches", c.hibpBaseURL)
+// BreachesRequest describes a [Client.Breaches] request.
+type BreachesRequest struct {
+	Domain string // If set, only return breaches for this domain.
+}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+// Breaches returns all breaches in the system.
+func (c *Client) Breaches(ctx context.Context, req BreachesRequest) ([]Breach, error) {
+	resource := "/breaches"
+
+	var params url.Values
+	if req.Domain != "" {
+		params.Set("domain", req.Domain)
+	}
+
+	u, err := url.Parse(c.hibpBaseURL)
 	if err != nil {
 		return nil, err
 	}
+	u.Path = resource
+	u.RawQuery = params.Encode()
 
-	req.Header.Set("User-Agent", c.userAgent)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("User-Agent", c.userAgent)
 
-	resp, err := c.h.Do(req)
+	resp, err := c.h.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +248,6 @@ func (c *Client) Breaches(ctx context.Context) ([]Breach, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, newRequestError(resp)
 	}
-
 	return parseBreaches(resp.Body)
 }
 
