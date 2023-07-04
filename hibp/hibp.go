@@ -157,7 +157,7 @@ func (c *Client) SetHTTPClient(h *http.Client) {
 	c.h = h
 }
 
-// Error represents a failed request to the HIBP API.
+// Error contains information about a failed request to the HIBP API.
 type Error struct {
 	StatusCode int
 	RetryAfter time.Duration
