@@ -65,7 +65,7 @@ type Breach struct {
 	//
 	// [unverified]: https://haveibeenpwned.com/FAQs#UnverifiedBreach
 	IsVerified bool `json:"IsVerified"`
-	// 	Indicates that the breach is considered [fabricated]. A fabricated
+	// Indicates that the breach is considered [fabricated]. A fabricated
 	// breach is unlikely to have been hacked from the indicated website and
 	// usually contains a large amount of manufactured data. However, it still
 	// contains legitimate email addresses and asserts that the account owners
