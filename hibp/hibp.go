@@ -78,7 +78,7 @@ type Breach struct {
 	//
 	// [sensitive]: https://haveibeenpwned.com/FAQs#SensitiveBreach
 	IsSensitive bool `json:"IsSensitive"`
-	//	Indicates if the breach has been [retired]. This data has been
+	// Indicates if the breach has been [retired]. This data has been
 	// permanently removed and will not be returned by the API.
 	//
 	// [retired]: https://haveibeenpwned.com/FAQs#RetiredBreach
