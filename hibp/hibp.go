@@ -2,27 +2,18 @@
 package hibp
 
 import (
-	"bufio"
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
-
-	"github.com/clfs/m/ntlm"
 )
 
-// defaultHIBPBaseURL is the default base URL for the HIBP API.
-const defaultHIBPBaseURL = "https://haveibeenpwned.com/api/v3/"
-
-// defaultPPBaseURL is the default base URL for the Pwned Passwords API.
-const defaultPPBaseURL = "https://api.pwnedpasswords.com"
+// defaultBaseURL is the default base URL for the HIBP API.
+const defaultBaseURL = "https://haveibeenpwned.com/api/v3/"
 
 // Breach represents a data breach.
 type Breach struct {
@@ -135,21 +126,19 @@ type Paste struct {
 
 // Client is a client for the HIBP API.
 type Client struct {
-	h           *http.Client
-	key         string
-	userAgent   string
-	hibpBaseURL string
-	ppBaseURL   string
+	h         *http.Client
+	key       string
+	userAgent string
+	baseURL   string
 }
 
 // NewClient returns a new HIBP client.
 func NewClient(apiKey, userAgent string) *Client {
 	return &Client{
-		h:           http.DefaultClient,
-		key:         apiKey,
-		userAgent:   userAgent,
-		hibpBaseURL: defaultHIBPBaseURL,
-		ppBaseURL:   defaultPPBaseURL,
+		h:         http.DefaultClient,
+		key:       apiKey,
+		userAgent: userAgent,
+		baseURL:   defaultBaseURL,
 	}
 }
 
@@ -228,7 +217,7 @@ func (c *Client) Breaches(ctx context.Context, req BreachesRequest) ([]Breach, e
 		params.Set("domain", req.Domain)
 	}
 
-	u, err := url.Parse(c.hibpBaseURL)
+	u, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +254,7 @@ func parseBreaches(r io.Reader) ([]Breach, error) {
 // attribute of a record compromised in a breach. For example, many breaches
 // expose data classes such as "Email addresses" and "Passwords".
 func (c *Client) DataClasses(ctx context.Context) ([]string, error) {
-	rawURL := fmt.Sprintf("%s/dataclasses", c.hibpBaseURL)
+	rawURL := fmt.Sprintf("%s/dataclasses", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
@@ -293,119 +282,4 @@ func parseDataClasses(r io.Reader) ([]string, error) {
 		return nil, err
 	}
 	return dc, nil
-}
-
-// HashType represents the type of a Pwned Passwords hash.
-type HashType int
-
-// HashType constants.
-const (
-	HashTypeSHA1 HashType = iota
-	HashTypeNTLM
-)
-
-// HashSuffixesRequest describes a [Client.HashSuffixes] request.
-type HashSuffixesRequest struct {
-	Prefix   string   // The prefix of the hash to search for.
-	HashType HashType // The type of hash to search for.
-}
-
-// HashSuffixes returns, for a given password hash prefix, all seen suffixes and
-// their frequencies.
-//
-// Server response padding is always enabled. The returned map will omit
-// suffixes that have a frequency of zero.
-func (c *Client) HashSuffixes(ctx context.Context, req HashSuffixesRequest) (map[string]int, error) {
-	rawURL := fmt.Sprintf("%s/range/%s", c.ppBaseURL, req.Prefix)
-
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	httpReq.Header.Set("User-Agent", c.userAgent)
-	httpReq.Header.Set("Add-Padding", "true")
-
-	resp, err := c.h.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, newRequestError(resp)
-	}
-
-	return parseSuffixFrequencies(resp.Body)
-}
-
-func parseSuffixFrequencies(r io.Reader) (map[string]int, error) {
-	m := make(map[string]int)
-	s := bufio.NewScanner(r)
-	for s.Scan() {
-		line := s.Text()
-		suffix, freq, ok := strings.Cut(line, ":")
-		if !ok {
-			return nil, fmt.Errorf("invalid line: %q", line)
-		}
-		n, err := strconv.Atoi(freq)
-		if err != nil {
-			return nil, fmt.Errorf("invalid line: %q", line)
-		}
-		switch {
-		case n < 0:
-			return nil, fmt.Errorf("invalid line: %q", line)
-		case n == 0:
-			continue // skip padding lines
-		default:
-			m[suffix] = n
-		}
-	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// IsPwnedPassword returns true if the given password has been pwned. This is a
-// helper function that checks both the SHA-1 and NTLM hash of the password.
-//
-// Callers that need additional control over rate limiting should use
-// [Client.HashSuffixes] directly.
-func (c *Client) IsPwnedPassword(ctx context.Context, password string) (bool, error) {
-	sha1Hash := sha1.Sum([]byte(password))
-	sha1Hex := hex.EncodeToString(sha1Hash[:])
-	sha1Prefix, sha1Suffix := sha1Hex[:5], sha1Hex[5:]
-
-	sha1Suffixes, err := c.HashSuffixes(ctx, HashSuffixesRequest{
-		Prefix:   sha1Prefix,
-		HashType: HashTypeSHA1,
-	})
-	if err != nil {
-		return false, err
-	}
-	for suffix := range sha1Suffixes {
-		if suffix == sha1Suffix {
-			return true, nil
-		}
-	}
-
-	ntlmHash := ntlm.Sum([]byte(password))
-	ntlmHex := hex.EncodeToString(ntlmHash[:])
-	ntlmPrefix, ntlmSuffix := ntlmHex[:5], ntlmHex[5:]
-
-	ntlmSuffixes, err := c.HashSuffixes(ctx, HashSuffixesRequest{
-		Prefix:   ntlmPrefix,
-		HashType: HashTypeNTLM,
-	})
-	if err != nil {
-		return false, err
-	}
-	for suffix := range ntlmSuffixes {
-		if suffix == ntlmSuffix {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
